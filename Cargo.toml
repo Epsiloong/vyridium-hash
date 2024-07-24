@@ -1,0 +1,38 @@
+[package]
+name = "vyridium_hash"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Common dependencies
+thiserror = "1.0.58"
+aes = { version = "0.8.3", features = ["hazmat"] }
+bytemuck = { version = "1.15.0", features = ["derive"] }
+
+# v1 features
+tiny-keccak = { version = "2.0", features = ["k12"], optional = true }
+
+# v2 features
+blake3 = { version = "1.5.1", optional = true }
+chacha20 = { version = "0.9.1" }
+
+fnv = "1.0.7"
+rc4 = "0.1.0"
+salsa20 = "0.10.2"
+sha2 = "0.10.8"
+siphasher = "1.0.1"
+suffix_array = "0.5.0"
+xxhash-rust = { version = "0.8.11", features = ["xxh64", "xxh3"] }
+
+vyridium_hash = { git = "https://github.com/epsiloong/vyridium-hash", branch = "main", version = "0.0.6" }
+
+[dev-dependencies]
+rand = "0.8.5"
+
+[features]
+default = ["v1"]
+v1 = ["dep:tiny-keccak"]
+# Only available in v2
+tracker = []
