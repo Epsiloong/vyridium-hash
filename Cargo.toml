@@ -2,6 +2,13 @@
 name = "vyridium_hash"
 version = "0.1.0"
 edition = "2021"
+authors = ["2 cool guys"]
+repository = "https://github.com/Epsiloong/vyridium-hash"
+license = "MIT"
+description = "vyridium_hash in rust"
+readme = "README.md"
+keywords = ["hash", "algorithm", "library"]
+categories = ["algorithms", "cryptography"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
