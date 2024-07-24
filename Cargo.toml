@@ -26,8 +26,6 @@ siphasher = "1.0.1"
 suffix_array = "0.5.0"
 xxhash-rust = { version = "0.8.11", features = ["xxh64", "xxh3"] }
 
-vyridium_hash = { git = "https://github.com/epsiloong/vyridium-hash", branch = "main", version = "0.0.6" }
-
 [dev-dependencies]
 rand = "0.8.5"
 
