@@ -3,8 +3,6 @@ use thiserror::Error as ThisError;
 #[cfg(feature = "v1")]
 pub mod v1;
 
-pub mod branch_table;
-
 // Number of bytes in a hash
 const HASH_SIZE: usize = 32;
 

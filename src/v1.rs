@@ -5,11 +5,11 @@ use rc4::Rc4;
 use rc4::StreamCipher;
 use sha2::Digest;
 use sha2::Sha256;
+use sha2::Sha512;
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
 use suffix_array::SuffixArray;
 
-use crate::branch_table::populate_branch_table;
 use crate::{Error, Hash};
 
 // This is the maximum of the scratchpad.
@@ -20,6 +20,32 @@ pub const BYTES_ARRAY_INPUT: usize = 200;
 const OP_COUNT: u64 = 64;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
+
+
+// Generate branch table
+fn populate_branch_table(input: &[u8]) -> [u64; 4096] {
+    let mut output: [u8; 32768] = [0; 32768];
+    let mut hasher = Sha512::new();
+
+    hasher.update(input);
+
+    let mut last_hash: [u8; 64];
+    let mut hash_idx = 0;
+    while hash_idx < 512 {
+        last_hash = hasher.finalize_reset().into();
+        output[hash_idx * 64..(hash_idx + 1) * 64].copy_from_slice(last_hash.as_ref());
+        // Add some variation so it's not just a chained hash
+        for item in last_hash.iter_mut() {
+            *item = item.wrapping_mul(5);
+        }
+        hasher.update(last_hash);
+        hash_idx += 1;
+    }
+
+    let output_u64: [u64; 4096] = unsafe { std::mem::transmute(output) };
+
+    output_u64
+}
 
 // Calculate and return sha256 hash.
 fn sha256_calc(input: &[u8]) -> [u8; 32] {
