@@ -286,8 +286,8 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
         (tries - 4) as u32 * 256 + (((data[253] as u64) << 8 | (data[254] as u64)) as u32 & 0x3ff);
 
     // Step 7: calculate the final sha256 hash.
-    let output: [u8; 32] = sha256_calc(&scratch_data[..data_len as usize]);
+    let hash: [u8; 32] = sha256_calc(&scratch_data[..data_len as usize]);
 
     // Return hash.
-    Ok(output)
+    Ok(hash)
 }
