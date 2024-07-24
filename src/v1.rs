@@ -1,11 +1,7 @@
 // Public crates.
 use chacha20::{cipher::KeyIvInit, ChaCha20};
-use rc4::KeyInit;
-use rc4::Rc4;
-use rc4::StreamCipher;
-use sha2::Digest;
-use sha2::Sha256;
-use sha2::Sha512;
+use rc4::{Rc4, KeyInit, StreamCipher};
+use sha2::{Sha256, Sha512, Digest};
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
 use suffix_array::SuffixArray;
