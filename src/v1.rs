@@ -8,8 +8,6 @@ use suffix_array::SuffixArray;
 
 use crate::{Error, Hash};
 
-// Input size in bytes
-pub const BYTES_ARRAY_INPUT: usize = 200;
 // This is the maximum of the scratchpad.
 const MAX_LENGTH: u32 = (256 * 384) - 1;
 // Number of unique operations
@@ -80,66 +78,7 @@ fn sip24_calc(input: &[u8], k0: u64, k1: u64) -> u64 {
     hasher.hash(input)
 }
 
-// Align the input to 8 bytes
-const ALIGNMENT: usize = 8;
-
-#[derive(Debug, bytemuck::Pod, bytemuck::Zeroable, Copy, Clone)]
-#[repr(C, align(8))]
-pub struct Bytes8Alignment([u8; ALIGNMENT]);
-
-// // This is a workaround to force the correct alignment on Windows and MacOS
-// // We need an input of `BYTES_ARRAY_INPUT` bytes, but we need to ensure that it's aligned to 8 bytes
-// // to be able to cast it to a `[u64; KECCAK_WORDS]` later on.
-#[derive(Debug, Clone)]
-pub struct AlignedInput {
-    data: Vec<Bytes8Alignment>,
-}
-
-impl Default for AlignedInput {
-    fn default() -> Self {
-        let mut n = BYTES_ARRAY_INPUT / ALIGNMENT;
-        if BYTES_ARRAY_INPUT % ALIGNMENT != 0 {
-            n += 1;
-        }
-
-        Self {
-            data: vec![Bytes8Alignment([0; ALIGNMENT]); n],
-        }
-    }
-}
-
-impl AlignedInput {
-    // The number of elements in the input
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    // The size of the input in bytes
-    pub fn size(&self) -> usize {
-        self.data.len() * ALIGNMENT
-    }
-
-    // Get a mutable pointer to the input
-    pub fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.data.as_mut_ptr() as *mut u8
-    }
-
-    // Retrieve the input as a mutable slice
-    pub fn as_mut_slice(&mut self) -> Result<&mut [u8; BYTES_ARRAY_INPUT], Error> {
-        bytemuck::cast_slice_mut(&mut self.data)
-            .try_into()
-            .map_err(|_| Error::FormatError)
-    }
-
-    // Retrieve the input as a slice
-    pub fn as_slice(&self) -> Result<&[u8; BYTES_ARRAY_INPUT], Error> {
-        bytemuck::cast_slice(&self.data)
-            .try_into()
-            .map_err(|_| Error::FormatError)
-    }
-}
-
-pub fn vyridium_hash(input: &[u8; BYTES_ARRAY_INPUT]) -> Result<Hash, Error> {
+pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let branch_table = populate_branch_table(input);
 
     // Step 1+2: calculate sha256 and expand data using Salsa20.
@@ -167,6 +106,7 @@ pub fn vyridium_hash(input: &[u8; BYTES_ARRAY_INPUT]) -> Result<Hash, Error> {
         let mut pos1: u8 = random_switcher.wrapping_shr(8) as u8;
         let mut pos2: u8 = random_switcher.wrapping_shr(16) as u8;
 
+        // Insure pos2 is larger.
         if pos1 > pos2 {
             std::mem::swap(&mut pos1, &mut pos2);
         }
