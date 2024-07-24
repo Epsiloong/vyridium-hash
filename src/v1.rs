@@ -8,10 +8,10 @@ use suffix_array::SuffixArray;
 
 use crate::{Error, Hash};
 
-// This is the maximum of the scratchpad.
-const MAX_LENGTH: u32 = (256 * 384) - 1;
 // Input size in bytes
 pub const BYTES_ARRAY_INPUT: usize = 200;
+// This is the maximum of the scratchpad.
+const MAX_LENGTH: u32 = (256 * 384) - 1;
 // Number of unique operations
 const OP_COUNT: u64 = 64;
 // Number of operations per branch
