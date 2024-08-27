@@ -1,6 +1,6 @@
 [package]
 name = "vyridium_hash"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 authors = ["2 cool guys"]
 repository = "https://github.com/Epsiloong/vyridium-hash"
@@ -17,25 +17,19 @@ categories = ["algorithms", "cryptography"]
 thiserror = "1.0.58"
 aes = { version = "0.8.3", features = ["hazmat"] }
 bytemuck = { version = "1.15.0", features = ["derive"] }
-
-# v1 features
-tiny-keccak = { version = "2.0", features = ["k12"], optional = true }
-
-# v2 features
-blake3 = { version = "1.5.1", optional = true }
 chacha20 = { version = "0.9.1" }
-
 fnv = "1.0.7"
 rc4 = "0.1.0"
 sha2 = "0.10.8"
+blake3 = { version = "1.5.1" }
 siphasher = "1.0.1"
 suffix_array = "0.5.0"
 xxhash-rust = { version = "0.8.11", features = ["xxh64", "xxh3"] }
+
 
 [dev-dependencies]
 rand = "0.8.5"
 
 [features]
 default = ["v1"]
-v1 = ["dep:tiny-keccak"]
 
