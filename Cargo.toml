@@ -30,3 +30,7 @@ xxhash-rust = { version = "0.8.11", features = ["xxh64", "xxh3"] }
 [dev-dependencies]
 rand = "0.8.5"
 
+[features]
+default = ["v1"]
+v1 = []
+
