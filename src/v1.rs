@@ -2,6 +2,7 @@
 use chacha20::{cipher::KeyIvInit, ChaCha20};
 use rc4::{Rc4, KeyInit, StreamCipher};
 use sha2::{Sha256, Sha512, Digest};
+use blake3::hash as blake3_hash;
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
 use suffix_array::SuffixArray;
@@ -82,7 +83,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let branch_table = populate_branch_table(input);
 
     // Step 1+2: calculate sha256 and expand data using Salsa20.
-    let mut data: [u8; 256] = chacha20_calc(&(sha256_calc(input)));
+    let mut data: [u8; 256] = chacha20_calc(&(blake3_hash(input).into()));
 
     // Step 3: rc4.
     let mut rc4 = Rc4::new(&data.into());
@@ -263,7 +264,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             }
 
             // calculate sha256 and expand data using Salsa20.
-            data = chacha20_calc(&(sha256_calc(&scratch_sa_bytes)));
+            data = chacha20_calc(&(blake3_hash(&scratch_sa_bytes).into()));
 
             // Do the rc4.
             stream = data.to_vec();
