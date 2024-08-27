@@ -1,7 +1,7 @@
 // Public crates.
 use chacha20::{cipher::KeyIvInit, ChaCha20};
 use rc4::{Rc4, KeyInit, StreamCipher};
-use sha2::{Sha256, Sha512, Digest};
+use sha2::{Sha512, Digest};
 use blake3::hash as blake3_hash;
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
@@ -40,16 +40,6 @@ fn populate_branch_table(input: &[u8]) -> [u64; 4096] {
     let output_u64: [u64; 4096] = unsafe { std::mem::transmute(output) };
 
     output_u64
-}
-
-// Calculate and return sha256 hash.
-fn sha256_calc(input: &[u8]) -> [u8; 32] {
-    let mut output: [u8; 32] = [0; 32];
-    let mut hasher = Sha256::new();
-    hasher.update(input);
-
-    output.copy_from_slice(hasher.finalize().as_slice());
-    output
 }
 
 // Encrypt and return salsa20 stream.
@@ -287,7 +277,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
         (tries - 4) as u32 * 256 + (((data[253] as u64) << 8 | (data[254] as u64)) as u32 & 0x3ff);
 
     // Step 7: calculate the final sha256 hash.
-    let hash: [u8; 32] = sha256_calc(&scratch_data[..data_len as usize]);
+    let hash: [u8; 32] = blake3_hash(&scratch_data[..data_len as usize]).into();
 
     // Return hash.
     Ok(hash)
