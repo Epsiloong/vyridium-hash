@@ -88,7 +88,6 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let mut scratch_data = [0u8; (MAX_LENGTH + 64) as usize];
     let mut prev_lhash = lhash;
     let mut tries: u64 = 0;
-    let suffixattempt: u64 = (((lhash as u8) & 0b1111) + 240) as u64;
 
     loop {
         tries += 1;
@@ -225,7 +224,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             lhash = sip24_calc(&data[..pos2 as usize], tries, prev_lhash);
         }
 
-        // 25% probablility.
+        // 25% probability.
         if dp_minus <= 0x40 {
             // Do the rc4.
             stream = data.to_vec();
@@ -237,34 +236,6 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
 
         // Copy all the tmp states.
         scratch_data[((tries - 1) * 256) as usize..(tries * 256) as usize].copy_from_slice(&data);
-
-        if tries == suffixattempt {
-            let data_len = tries as u32 * 256;
-
-            // build suffix array.
-            let scratch_sa = SuffixArray::new(&scratch_data[..data_len as usize]);
-            let mut scratch_sa_bytes: Vec<u8> = vec![];
-            for vector in &scratch_sa.into_parts().1[1..(data_len as usize + 1)] {
-                // Little and big endian.
-                if cfg!(target_endian = "little") {
-                    scratch_sa_bytes.extend_from_slice(&vector.to_le_bytes());
-                } else {
-                    scratch_sa_bytes.extend_from_slice(&vector.to_be_bytes());
-                }
-            }
-
-            // calculate sha256 and expand data using Salsa20.
-            data = chacha20_calc(&(blake3_hash(&scratch_sa_bytes).into()));
-
-            // Do the rc4.
-            stream = data.to_vec();
-            rc4.apply_keystream(&mut stream);
-            data.copy_from_slice(&stream);
-
-            // Copy all the tmp states.
-            scratch_data[((tries - 1) * 256) as usize..(tries * 256) as usize]
-                .copy_from_slice(&data);
-        }
 
         // Keep looping until condition is satisfied.
         if tries > 260 + 16 || (data[255] >= 0xf0 && tries > 260) {
