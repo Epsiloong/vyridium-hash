@@ -5,7 +5,6 @@ use sha2::{Sha512, Digest};
 use blake3::hash as blake3_hash;
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
-use suffix_array::SuffixArray;
 
 use crate::{Error, Hash};
 
@@ -16,6 +15,20 @@ const OP_COUNT: u64 = 64;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
 
+// Generate cachehog
+fn populate_cachehog(seed: &[u8], len: usize) -> Vec<u8> {
+    let mut cachehog = vec![0u8; len];
+    let mut hasher = Sha512::new();
+    hasher.update(seed);
+
+    for i in 0..len {
+        let hash = hasher.finalize_reset();
+        cachehog[i] = hash[0];
+        hasher.update(hash);
+    }
+
+    cachehog
+}
 
 // Generate branch table
 fn populate_branch_table(input: &[u8]) -> [u64; 4096] {
@@ -71,6 +84,7 @@ fn sip24_calc(input: &[u8], k0: u64, k1: u64) -> u64 {
 
 pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let branch_table = populate_branch_table(input);
+    let cachehog = populate_cachehog(input, 3_145_728);
 
     // Step 1+2: calculate sha256 and expand data using Salsa20.
     let mut data: [u8; 256] = chacha20_calc(&(blake3_hash(input).into()));
@@ -101,11 +115,6 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             std::mem::swap(&mut pos1, &mut pos2);
         }
 
-        // Give wave or wavefronts an optimization.
-        if pos2 - pos1 > 64 {
-            pos2 = pos1 + ((pos2 - pos1) & 0x3f);
-        }
-
         // Bounds check elimination.
         let _ = &data[pos1 as usize..pos2 as usize];
 
@@ -120,6 +129,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             let mut tmp = data[i as usize];
             for j in (0..OP_PER_BRANCH).rev() {
                 let op = ((opcode >> (j * 8)) & 0xFF) & (OP_COUNT - 1);
+                let cachehog_idx = ((i as usize * OP_PER_BRANCH as usize) + (j as usize)) * cachehog.len() % cachehog.len();
                 tmp = match op {
                     0x00 => tmp.wrapping_add(tmp),                                 // +
                     0x01 => tmp.wrapping_sub(tmp ^ 97),                            // XOR and
@@ -187,7 +197,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
                     0x3F => tmp.wrapping_mul(data[pos1 as usize]), // * with beginning of data
 
                     _ => unreachable!("Unknown branch reached with branch ID {:x}", op),
-                }
+                }.wrapping_add(cachehog[cachehog_idx])
             }
             // Push tmp to data
             data[i as usize] = tmp;
