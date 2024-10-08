@@ -6,7 +6,7 @@ use blake3::hash as blake3_hash;
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
 
-use crate::{Error, Hash};
+use crate::{Error, Hash, HASH_SIZE};
 
 // This is the maximum of the scratchpad.
 const MAX_LENGTH: u32 = (256 * 384) - 1;
@@ -14,20 +14,97 @@ const MAX_LENGTH: u32 = (256 * 384) - 1;
 const OP_COUNT: u64 = 64;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
+// Memory size is the size of the cachehog in u64s
+// In bytes, this is equal to ~ 440KB
+const MEMORY_SIZE: usize = 429 * 128;
+const CHUNK_SIZE: usize = 32;
+const NONCE_SIZE: usize = 12;
+const OUTPUT_SIZE: usize = MEMORY_SIZE * 8;
 
-// Generate cachehog
-fn populate_cachehog(seed: &[u8], len: usize) -> Vec<u8> {
-    let mut cachehog = vec![0u8; len];
-    let mut hasher = Sha512::new();
-    hasher.update(seed);
+// cachehog used to store intermediate values
+// It has a fixed size of `MEMORY_SIZE` u64s
+// It can be easily reused for multiple hashing operations safely
+#[derive(Debug, Clone)]
+pub struct CacheHog(Box<[u64; MEMORY_SIZE]>);
 
-    for i in 0..len {
-        let hash = hasher.finalize_reset();
-        cachehog[i] = hash[0];
-        hasher.update(hash);
+impl CacheHog {
+    // Retrieve the cachehog size
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
-    cachehog
+    // Get the inner cachehog as a mutable u64 slice
+    #[inline(always)]
+    pub fn as_mut_slice(&mut self) -> &mut [u64; MEMORY_SIZE] {
+        &mut self.0
+    }
+
+    // Retrieve the cachehog as a mutable bytes slice
+    #[inline(always)]
+    pub fn as_mut_bytes(&mut self) -> Result<&mut [u8; MEMORY_SIZE * 8], Error> {
+        bytemuck::try_cast_slice_mut(self.as_mut_slice())
+            .map_err(|e| Error::CastError(e))?
+            .try_into()
+            .map_err(|_| Error::FormatError)
+    }
+}
+
+impl Default for CacheHog {
+    fn default() -> Self {
+        Self(vec![0; MEMORY_SIZE].into_boxed_slice().try_into().unwrap())
+    }
+}
+
+// Generate cachehog
+fn populate_cachehog(input: &[u8], cachehog: &mut [u8; MEMORY_SIZE * 8]) -> Result<(), Error> {
+    // Reset the scratchpad to 0
+    // This is done to ensure that the scratchpad is clean
+    // and prevent us to do multiple heap allocations in below loop
+    cachehog.fill(0);
+
+    let mut output_offset = 0;
+    let mut nonce = [0u8; NONCE_SIZE];
+
+    // Generate the nonce from the input
+    let mut input_hash: Hash = blake3_hash(input).into();
+    nonce.copy_from_slice(&input_hash[..NONCE_SIZE]);
+
+    let num_chunks = (input.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
+
+    for (chunk_index, chunk) in input.chunks(CHUNK_SIZE).enumerate() {
+        // Concatenate the input hash with the chunk
+        let mut tmp = [0u8; HASH_SIZE * 2];
+        tmp[0..HASH_SIZE].copy_from_slice(&input_hash);
+        tmp[HASH_SIZE..HASH_SIZE + chunk.len()].copy_from_slice(chunk);
+
+        // Hash it to not trust the input
+        input_hash = blake3_hash(&tmp).into();
+
+        let mut cipher = ChaCha20::new(&input_hash.into(), &nonce.into());
+
+        // Calculate the remaining size and how much to generate this iteration
+        let remaining_output_size = OUTPUT_SIZE - output_offset;
+        // Remaining chunks
+        let chunks_left = num_chunks - chunk_index;
+        let chunk_output_size = remaining_output_size / chunks_left;
+        let current_output_size = remaining_output_size.min(chunk_output_size);
+
+        // Apply the keystream to the output
+        let offset = chunk_index * current_output_size;
+        let part = &mut cachehog[offset..offset+current_output_size];
+        cipher.apply_keystream(part);
+
+        output_offset += current_output_size;
+
+        // Update the nonce with the last NONCE_SIZE bytes of temp_output
+        let nonce_start = current_output_size.saturating_sub(NONCE_SIZE);
+
+        // Copy the new nonce
+        nonce.copy_from_slice(&part[nonce_start..]);
+    }
+
+    Ok(())
 }
 
 // Generate branch table
@@ -84,7 +161,9 @@ fn sip24_calc(input: &[u8], k0: u64, k1: u64) -> u64 {
 
 pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let branch_table = populate_branch_table(input);
-    let cachehog = populate_cachehog(input, 145_728);
+
+    let mut hashhog_bytes = [0u8; MEMORY_SIZE * 8];
+    populate_cachehog(input, &mut hashhog_bytes)?;
 
     // Step 1+2: calculate sha256 and expand data using Salsa20.
     let mut data: [u8; 256] = chacha20_calc(&(blake3_hash(input).into()));
@@ -129,7 +208,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             let mut tmp = data[i as usize];
             for j in (0..OP_PER_BRANCH).rev() {
                 let op = ((opcode >> (j * 8)) & 0xFF) & (OP_COUNT - 1);
-                let cachehog_idx = ((i as usize * OP_PER_BRANCH as usize) + (j as usize)) * cachehog.len() % cachehog.len();
+                let cachehog_idx = ((i as usize * OP_PER_BRANCH as usize) + (j as usize)) * hashhog_bytes.len() % hashhog_bytes.len();
                 tmp = match op {
                     0x00 => tmp.wrapping_add(tmp),                                 // +
                     0x01 => tmp.wrapping_sub(tmp ^ 97),                            // XOR and
@@ -197,7 +276,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
                     0x3F => tmp.wrapping_mul(data[pos1 as usize]), // * with beginning of data
 
                     _ => unreachable!("Unknown branch reached with branch ID {:x}", op),
-                }.wrapping_add(cachehog[cachehog_idx])
+                }.wrapping_add(hashhog_bytes[cachehog_idx])
             }
             // Push tmp to data
             data[i as usize] = tmp;
