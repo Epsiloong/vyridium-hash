@@ -84,7 +84,7 @@ fn sip24_calc(input: &[u8], k0: u64, k1: u64) -> u64 {
 
 pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let branch_table = populate_branch_table(input);
-    let cachehog = populate_cachehog(input, 3_145_728);
+    let cachehog = populate_cachehog(input, 145_728);
 
     // Step 1+2: calculate sha256 and expand data using Salsa20.
     let mut data: [u8; 256] = chacha20_calc(&(blake3_hash(input).into()));
