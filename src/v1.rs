@@ -14,9 +14,7 @@ const MAX_LENGTH: u32 = (256 * 384) - 1;
 const OP_COUNT: u64 = 64;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
-// Memory size is the size of the cachehog in u64s
-// In bytes, this is equal to ~ 440KB
-const MEMORY_SIZE: usize = 3_145_728;
+const MEMORY_SIZE: usize = 1_048_576;
 const CHUNK_SIZE: usize = 32;
 const NONCE_SIZE: usize = 12;
 const OUTPUT_SIZE: usize = MEMORY_SIZE / 8;
