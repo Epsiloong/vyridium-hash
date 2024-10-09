@@ -5,9 +5,8 @@ use sha2::{Sha512, Digest};
 use blake3::hash as blake3_hash;
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
-use suffix_array::SuffixArray;
 
-use crate::{Error, Hash};
+use crate::{Error, Hash, HASH_SIZE};
 
 // This is the maximum of the scratchpad.
 const MAX_LENGTH: u32 = (256 * 384) - 1;
@@ -15,7 +14,61 @@ const MAX_LENGTH: u32 = (256 * 384) - 1;
 const OP_COUNT: u64 = 64;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
+const MEMORY_SIZE: usize = 1048576;
+const CHUNK_SIZE: usize = 32;
+const NONCE_SIZE: usize = 12;
+const OUTPUT_SIZE: usize = MEMORY_SIZE / 8;
+const LCG_MUL: usize = 1664525;    // LCG multiplier
+const LCG_INC: usize = 1013904223; // LCG increment
+const PRIME_MUL: usize = 2654435761;
 
+// Generate cachehog
+fn populate_cachehog(input: &[u8]) -> Result<[u8; MEMORY_SIZE], Error> {
+    let mut cachehog = [0u8; MEMORY_SIZE];
+
+    let mut output_offset = 0;
+    let mut nonce = [0u8; NONCE_SIZE];
+
+    // Generate the nonce from the input
+    let mut input_hash: Hash = blake3_hash(input).into();
+    nonce.copy_from_slice(&input_hash[..NONCE_SIZE]);
+
+    let num_chunks = (input.len() + CHUNK_SIZE - 1) / CHUNK_SIZE;
+
+    for (chunk_index, chunk) in input.chunks(CHUNK_SIZE).enumerate() {
+        // Concatenate the input hash with the chunk
+        let mut tmp = [0u8; HASH_SIZE * 2];
+        tmp[0..HASH_SIZE].copy_from_slice(&input_hash);
+        tmp[HASH_SIZE..HASH_SIZE + chunk.len()].copy_from_slice(chunk);
+
+        // Hash it to not trust the input
+        input_hash = blake3_hash(&tmp).into();
+
+        let mut cipher = ChaCha20::new(&input_hash.into(), &nonce.into());
+
+        // Calculate the remaining size and how much to generate this iteration
+        let remaining_output_size = OUTPUT_SIZE - output_offset;
+        // Remaining chunks
+        let chunks_left = num_chunks - chunk_index;
+        let chunk_output_size = remaining_output_size / chunks_left;
+        let current_output_size = remaining_output_size.min(chunk_output_size);
+
+        // Apply the keystream to the output
+        let offset = chunk_index * current_output_size;
+        let part = &mut cachehog[offset..offset+current_output_size];
+        cipher.apply_keystream(part);
+
+        output_offset += current_output_size;
+
+        // Update the nonce with the last NONCE_SIZE bytes of temp_output
+        let nonce_start = current_output_size.saturating_sub(NONCE_SIZE);
+
+        // Copy the new nonce
+        nonce.copy_from_slice(&part[nonce_start..]);
+    }
+
+    Ok(cachehog)
+}
 
 // Generate branch table
 fn populate_branch_table(input: &[u8]) -> [u64; 4096] {
@@ -72,6 +125,9 @@ fn sip24_calc(input: &[u8], k0: u64, k1: u64) -> u64 {
 pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let branch_table = populate_branch_table(input);
 
+    let mut hashhog_bytes = populate_cachehog(input)?;
+    
+
     // Step 1+2: calculate sha256 and expand data using Salsa20.
     let mut data: [u8; 256] = chacha20_calc(&(blake3_hash(input).into()));
 
@@ -88,7 +144,6 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
     let mut scratch_data = [0u8; (MAX_LENGTH + 64) as usize];
     let mut prev_lhash = lhash;
     let mut tries: u64 = 0;
-    let suffixattempt: u64 = (((lhash as u8) & 0b1111) + 240) as u64;
 
     loop {
         tries += 1;
@@ -100,11 +155,6 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
         // Insure pos2 is larger.
         if pos1 > pos2 {
             std::mem::swap(&mut pos1, &mut pos2);
-        }
-
-        // Give wave or wavefronts an optimization.
-        if pos2 - pos1 > 64 {
-            pos2 = pos1 + ((pos2 - pos1) & 0x3f);
         }
 
         // Bounds check elimination.
@@ -120,6 +170,9 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
         for i in pos1..pos2 {
             let mut tmp = data[i as usize];
             for j in (0..OP_PER_BRANCH).rev() {
+                let intermediate = (tmp as usize).wrapping_add(data[i.wrapping_sub(tmp) as usize] as usize).wrapping_add(j as usize).wrapping_mul(i  as usize);
+                let lcg_value = LCG_MUL.wrapping_mul(intermediate).wrapping_add(LCG_INC);
+                let cachehog_idx = lcg_value * PRIME_MUL % hashhog_bytes.len();
                 let op = ((opcode >> (j * 8)) & 0xFF) & (OP_COUNT - 1);
                 tmp = match op {
                     0x00 => tmp.wrapping_add(tmp),                                 // +
@@ -188,7 +241,8 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
                     0x3F => tmp.wrapping_mul(data[pos1 as usize]), // * with beginning of data
 
                     _ => unreachable!("Unknown branch reached with branch ID {:x}", op),
-                }
+                }.wrapping_add(hashhog_bytes[cachehog_idx]);
+                hashhog_bytes[cachehog_idx] = tmp;
             }
             // Push tmp to data
             data[i as usize] = tmp;
@@ -225,7 +279,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             lhash = sip24_calc(&data[..pos2 as usize], tries, prev_lhash);
         }
 
-        // 25% probablility.
+        // 25% probability.
         if dp_minus <= 0x40 {
             // Do the rc4.
             stream = data.to_vec();
@@ -237,34 +291,6 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
 
         // Copy all the tmp states.
         scratch_data[((tries - 1) * 256) as usize..(tries * 256) as usize].copy_from_slice(&data);
-
-        if tries == suffixattempt {
-            let data_len = tries as u32 * 256;
-
-            // build suffix array.
-            let scratch_sa = SuffixArray::new(&scratch_data[..data_len as usize]);
-            let mut scratch_sa_bytes: Vec<u8> = vec![];
-            for vector in &scratch_sa.into_parts().1[1..(data_len as usize + 1)] {
-                // Little and big endian.
-                if cfg!(target_endian = "little") {
-                    scratch_sa_bytes.extend_from_slice(&vector.to_le_bytes());
-                } else {
-                    scratch_sa_bytes.extend_from_slice(&vector.to_be_bytes());
-                }
-            }
-
-            // calculate sha256 and expand data using Salsa20.
-            data = chacha20_calc(&(blake3_hash(&scratch_sa_bytes).into()));
-
-            // Do the rc4.
-            stream = data.to_vec();
-            rc4.apply_keystream(&mut stream);
-            data.copy_from_slice(&stream);
-
-            // Copy all the tmp states.
-            scratch_data[((tries - 1) * 256) as usize..(tries * 256) as usize]
-                .copy_from_slice(&data);
-        }
 
         // Keep looping until condition is satisfied.
         if tries > 260 + 16 || (data[255] >= 0xf0 && tries > 260) {
