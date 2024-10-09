@@ -168,7 +168,12 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             let mut tmp = data[i as usize];
             for j in (0..OP_PER_BRANCH).rev() {
                 let op = ((opcode >> (j * 8)) & 0xFF) & (OP_COUNT - 1);
-                let cachehog_idx = ((i as usize * OP_PER_BRANCH as usize) + (j as usize)) * hashhog_bytes.len() % hashhog_bytes.len();
+                let a = 1664525;    // LCG multiplier
+                let c = 1013904223; // LCG increment
+                let prime_multiplier = 2654435761; // Large prime number
+                let intermediate = (i as usize).wrapping_add(j as usize).wrapping_mul(tmp);
+                let lcg_value = (a.wrapping_mul(intermediate).wrapping_add(c)) % hashhog_bytes.len();
+                let cachehog_idx = lcg_value * prime_multiplier % hashhog_bytes.len();
                 tmp = match op {
                     0x00 => tmp.wrapping_add(tmp),                                 // +
                     0x01 => tmp.wrapping_sub(tmp ^ 97),                            // XOR and
