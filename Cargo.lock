@@ -351,7 +351,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vyridium_hash"
-version = "0.2.12"
+version = "0.2.13"
 dependencies = [
  "aes",
  "blake3",
