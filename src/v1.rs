@@ -20,6 +20,7 @@ const NONCE_SIZE: usize = 12;
 const OUTPUT_SIZE: usize = MEMORY_SIZE / 8;
 const LCG_MUL: usize = 1664525;    // LCG multiplier
 const LCG_INC: usize = 1013904223; // LCG increment
+const PRIME_MUL: usize = 2654435761;
 
 // Generate cachehog
 fn populate_cachehog(input: &[u8]) -> Result<[u8; MEMORY_SIZE], Error> {
@@ -172,7 +173,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
                 let op = ((opcode >> (j * 8)) & 0xFF) & (OP_COUNT - 1);
                 let intermediate = (tmp as usize).wrapping_add(j as usize).wrapping_mul(i  as usize);
                 let lcg_value = LCG_MUL.wrapping_mul(intermediate).wrapping_add(LCG_INC);
-                let cachehog_idx = lcg_value % hashhog_bytes.len();
+                let cachehog_idx = lcg_value * PRIME_MUL % hashhog_bytes.len();
                 tmp = match op {
                     0x00 => tmp.wrapping_add(tmp),                                 // +
                     0x01 => tmp.wrapping_sub(tmp ^ 97),                            // XOR and
