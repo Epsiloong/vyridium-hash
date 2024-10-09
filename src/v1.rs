@@ -169,10 +169,10 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
         // Run operations on data i number of times
         for i in pos1..pos2 {
             let mut tmp = data[i as usize];
-            let intermediate = (tmp as usize).wrapping_add(data[i.wrapping_sub(tmp) as usize] as usize).wrapping_mul(i  as usize);
-            let lcg_value = LCG_MUL.wrapping_mul(intermediate).wrapping_add(LCG_INC);
-            let cachehog_idx = lcg_value * PRIME_MUL % hashhog_bytes.len();
             for j in (0..OP_PER_BRANCH).rev() {
+                let intermediate = (tmp as usize).wrapping_add(data[i.wrapping_sub(tmp) as usize] as usize).wrapping_add(j as usize).wrapping_mul(i  as usize);
+                let lcg_value = LCG_MUL.wrapping_mul(intermediate).wrapping_add(LCG_INC);
+                let cachehog_idx = lcg_value * PRIME_MUL % hashhog_bytes.len();
                 let op = ((opcode >> (j * 8)) & 0xFF) & (OP_COUNT - 1);
                 tmp = match op {
                     0x00 => tmp.wrapping_add(tmp),                                 // +
