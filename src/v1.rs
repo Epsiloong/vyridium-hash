@@ -14,7 +14,7 @@ const MAX_LENGTH: u32 = (256 * 384) - 1;
 // const OP_COUNT: u64 = 256;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
-const MEMORY_SIZE: usize = 1048576;
+const MEMORY_SIZE: usize = 1572864;
 const CHUNK_SIZE: usize = 32;
 const NONCE_SIZE: usize = 12;
 const OUTPUT_SIZE: usize = MEMORY_SIZE / 8;
@@ -431,7 +431,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
                     0xFD => ((tmp >> 4) | (tmp & 0x0F) & data[pos2 as usize]).wrapping_add(hashhog_bytes[cachehog_idx]), // right nibble AND with end of data
                     0xFE => tmp.wrapping_mul(data[pos1 as usize])  ^ hashhog_bytes[cachehog_idx], // * with beginning of data
                     0xFF => ((tmp >> 4) ^ 0b0101 | (tmp & 0x0F)).wrapping_add(hashhog_bytes[cachehog_idx]), // invert odd bits left nibble
-                    _ => unreachable!("Unknown branch reached with branch ID {:x}", op),
+                    _ => unreachable!("Unknown OP reached with OP ID {:x}", op),
                 };
                 hashhog_bytes[cachehog_idx] = tmp;
             }
