@@ -13,10 +13,9 @@ const MAX_LENGTH: u32 = (256 * 384) - 1;
 // const OP_COUNT: u64 = 256;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
-const MEMORY_SIZE: usize = 1572864;
+const MEMORY_SIZE: usize = (1 * 1024 * 1024);
 const CHUNK_SIZE: usize = 32;
 const NONCE_SIZE: usize = 12;
-const OUTPUT_SIZE: usize = MEMORY_SIZE;
 const LCG_MUL: usize = 1664525;    // LCG multiplier
 const LCG_INC: usize = 1013904223; // LCG increment
 const PRIME_MUL: usize = 2654435761;
@@ -46,7 +45,7 @@ fn populate_cachehog(input: &[u8]) -> Result<[u8; MEMORY_SIZE], Error> {
         let mut cipher = ChaCha20::new(&input_hash.into(), &nonce.into());
 
         // Calculate the remaining size and how much to generate this iteration
-        let remaining_output_size = OUTPUT_SIZE - output_offset;
+        let remaining_output_size = MEMORY_SIZE - output_offset;
         // Remaining chunks
         let chunks_left = num_chunks - chunk_index;
         let chunk_output_size = remaining_output_size / chunks_left;
