@@ -13,7 +13,7 @@ const MAX_LENGTH: u32 = (256 * 384) - 1;
 // const OP_COUNT: u64 = 256;
 // Number of operations per branch
 const OP_PER_BRANCH: u64 = 8;
-const MEMORY_SIZE: usize = (512 * 1024);
+const MEMORY_SIZE: usize = 512 * 1024;
 const CHUNK_SIZE: usize = 32;
 const NONCE_SIZE: usize = 12;
 const LCG_MUL: usize = 1664525;    // LCG multiplier
@@ -21,7 +21,7 @@ const LCG_INC: usize = 1013904223; // LCG increment
 const PRIME_MUL: usize = 2654435761;
 
 // Generate cachehog
-fn populate_cachehog(input: &[u8]) -> Result<Vec<u8>, Error> {
+fn populate_cachehog(input: &[u8]) -> Result<[u8; MEMORY_SIZE], Error> {
     let mut cachehog = [0u8; MEMORY_SIZE];
 
     let mut output_offset = 0;
@@ -65,7 +65,7 @@ fn populate_cachehog(input: &[u8]) -> Result<Vec<u8>, Error> {
         nonce.copy_from_slice(&part[nonce_start..]);
     }
 
-    Ok(cachehog.to_vec())
+    Ok(cachehog)
 }
 
 // Generate branch table
