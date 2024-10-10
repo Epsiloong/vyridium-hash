@@ -158,7 +158,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             for j in (0..OP_PER_BRANCH).rev() {
                 let intermediate = (tmp as usize).wrapping_add(data[i.wrapping_sub(tmp) as usize] as usize).wrapping_add(j as usize).wrapping_mul(i  as usize);
                 let lcg_value = LCG_MUL.wrapping_mul(intermediate).wrapping_add(LCG_INC);
-                let cachehog_idx = lcg_value.wrapping_add(PRIME_MUL) % hashhog_bytes.len();
+                let cachehog_idx = lcg_value.wrapping_mul(PRIME_MUL) % hashhog_bytes.len();
                 let op = (opcode >> (j * 8)) & 0xFF;
                 tmp = match op {
                     0x00 => ((tmp >> 4) | (tmp & 0x0F) ^ 0b0101).wrapping_sub(hashhog_bytes[cachehog_idx]), // invert odd bits right nibble
