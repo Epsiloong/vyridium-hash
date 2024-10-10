@@ -1,7 +1,6 @@
 // Public crates.
 use chacha20::{cipher::KeyIvInit, ChaCha20};
 use rc4::{Rc4, KeyInit, StreamCipher};
-use sha2::{Sha512, Digest};
 use blake3::hash as blake3_hash;
 use siphasher::sip::SipHasher24;
 use std::hash::Hasher;
@@ -17,7 +16,7 @@ const OP_PER_BRANCH: u64 = 8;
 const MEMORY_SIZE: usize = 1572864;
 const CHUNK_SIZE: usize = 32;
 const NONCE_SIZE: usize = 12;
-const OUTPUT_SIZE: usize = MEMORY_SIZE / 8;
+const OUTPUT_SIZE: usize = MEMORY_SIZE;
 const LCG_MUL: usize = 1664525;    // LCG multiplier
 const LCG_INC: usize = 1013904223; // LCG increment
 const PRIME_MUL: usize = 2654435761;
@@ -160,7 +159,7 @@ pub fn vyridium_hash(input: &[u8]) -> Result<Hash, Error> {
             for j in (0..OP_PER_BRANCH).rev() {
                 let intermediate = (tmp as usize).wrapping_add(data[i.wrapping_sub(tmp) as usize] as usize).wrapping_add(j as usize).wrapping_mul(i  as usize);
                 let lcg_value = LCG_MUL.wrapping_mul(intermediate).wrapping_add(LCG_INC);
-                let cachehog_idx = lcg_value * PRIME_MUL % hashhog_bytes.len();
+                let cachehog_idx = lcg_value.wrapping_add(PRIME_MUL) % hashhog_bytes.len();
                 let op = (opcode >> (j * 8)) & 0xFF;
                 tmp = match op {
                     0x00 => ((tmp >> 4) | (tmp & 0x0F) ^ 0b0101).wrapping_sub(hashhog_bytes[cachehog_idx]), // invert odd bits right nibble
